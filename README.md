@@ -1,6 +1,6 @@
 # sislimoda_admin_dashboard
 
-A new Flutter project.
+A dashboard that displays products, statistics, sellers, and users. It also approves and rejects products.
 
 ## Getting Started
 
