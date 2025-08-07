@@ -1,0 +1,238 @@
+import 'dart:convert';
+
+import 'package:dotted_border/dotted_border.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:multi_dropdown/models/value_item.dart';
+import 'package:sislimoda_admin_dashboard/components/button/button.dart';
+import 'package:sislimoda_admin_dashboard/components/custom_items_cubits/loading_cubit/loading_cubit.dart';
+import 'package:sislimoda_admin_dashboard/components/custom_multiselect.dart';
+import 'package:sislimoda_admin_dashboard/components/custom_pops.dart';
+import 'package:sislimoda_admin_dashboard/components/generic_bind.dart';
+import 'package:sislimoda_admin_dashboard/components/screen.dart';
+import 'package:sislimoda_admin_dashboard/controllers/upload_image_controller.dart';
+import 'package:sislimoda_admin_dashboard/cubits/generic_cubit/generic_cubit.dart';
+import 'package:sislimoda_admin_dashboard/helper/arabic_to_english_number.dart';
+import 'package:sislimoda_admin_dashboard/models/product/product_model.dart';
+import 'package:sislimoda_admin_dashboard/screens/categories/widgets/add_category.dart';
+import 'package:sislimoda_admin_dashboard/services/app_services.dart';
+import 'package:sislimoda_admin_dashboard/translations/codegen_loader.g.dart';
+import 'package:sislimoda_admin_dashboard/translations/local_keys.g.dart';
+import 'package:sislimoda_admin_dashboard/utility/app_colors.dart';
+import 'package:sislimoda_admin_dashboard/utility/app_fonts.dart';
+import 'package:sislimoda_admin_dashboard/utility/app_setting.dart';
+
+class AddBanner extends StatefulWidget{
+  const AddBanner(
+      {super.key,
+    required this.countries,
+      required this.operationType,
+      required this.afterAdd});
+  // final List<ProductModel> products;
+  final OperationType operationType;
+  final Function afterAdd;
+  final List<ValueItem> countries; // بدل products
+
+  @override
+  State<AddBanner> createState() => _AddBannerState();
+}
+
+class _AddBannerState extends State<AddBanner> {
+  GenericCubit<String> imageCubit = GenericCubit<String>();
+  XFile? selectedImage;
+  Loading loading = Loading();
+String selectedCountryId = '';
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    imageCubit.update(data: '');
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+   return Screen(
+  loadingCubit: loading,
+  child: Dialog(
+    clipBehavior: Clip.antiAlias,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+        maxWidth: 400.w,
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(
+                  widget.operationType == OperationType.add
+                      ? LocaleKeys.add.tr()
+                      : LocaleKeys.updateCategory.tr(),
+                  style: AppFonts.apptextStyle.copyWith(
+                      fontWeight: FontWeight.w700, fontSize: 20),
+                ),
+                const Spacer(),
+                InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Icon(Icons.close))
+              ],
+            ),
+            const SizedBox(height: 15),
+            const Divider(color: AppColors.dividerColor),
+            const SizedBox(height: 16),
+            
+            // Upload Image
+            InkWell(
+              onTap: () {
+                UploadImageController.getFormDataImage().then((value) {
+                  if (value != null) {
+                    selectedImage = value;
+                    imageCubit.update(data: value.path);
+                  }
+                });
+              },
+              child: GenericBuilder<String>(
+                genericCubit: imageCubit,
+                builder: (image) {
+                  return DottedBorder(
+                    borderType: BorderType.RRect,
+                    radius: Radius.circular(24.r),
+                    strokeWidth: 1,
+                    strokeCap: StrokeCap.butt,
+                    color: image.isNotEmpty
+                        ? AppColors.mainColor
+                        : AppColors.error,
+                    padding: EdgeInsets.zero,
+                    dashPattern: [10],
+                    child: Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(vertical: 40, horizontal: 20.w),
+                      decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10.r)),
+                      child: image == ''
+                          ? Column(
+                              children: [
+                                const CircleAvatar(
+                                  backgroundColor: AppColors.addColor,
+                                  radius: 15,
+                                  child: Icon(Icons.add, color: Colors.white),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '${LocaleKeys.pleaseSelectImages.tr()} (jpg-png-jpeg)',
+                                  textAlign: TextAlign.center,
+                                  style: AppFonts.apptextStyle.copyWith(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400),
+                                ),
+                              ],
+                            )
+                          : Image.network(image, height: 100),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Country select
+            CustomMultiSelect(
+              hint: isArabic ? 'إختر الدولة' : "Select country",
+              items: widget.countries.map((country) {
+                return ValueItem(
+                  label: country.label ?? '',
+                  value: country.value ?? '',
+                );
+              }).toList(),
+              onChange: (List<ValueItem> values) {
+                if (values.isNotEmpty) {
+                  selectedCountryId = values.first.value;
+                } else {
+                  selectedCountryId = '';
+                }
+              },
+            ),
+
+            const SizedBox(height: 16),
+
+            // Submit button
+            SizedBox(
+              width: 205,
+              height: 50,
+              child: AppButton(
+                onPress: () async {
+                  if (selectedImage == null) {
+                    showErrorMessage(
+                      message: isArabic
+                          ? 'الرجاء إختيار صورة'
+                          : 'Please select image',
+                    );
+                    return;
+                  }
+                  if (selectedCountryId == '') {
+                    showErrorMessage(
+                      message: isArabic
+                          ? 'الرجاء إختيار دوله'
+                          : 'Please select country',
+                    );
+                    return;
+                  }
+
+                  final bytes = await selectedImage?.readAsBytes();
+                  String img64 = base64Encode(bytes!.toList());
+                  await context.uploadAttachment(
+                    img64: img64,
+                    imageName: selectedImage?.name ?? '',
+                    afterUpload: (selectedId) async {
+                      Navigator.pop(context);
+                      loading.show;
+                      try {
+                        var result = await AppService.callService(
+                          actionType: ActionType.post,
+                          apiName: 'api/Banar/Add',
+                          body: {
+                            "type": "bank",
+                            "countryId": selectedCountryId,
+                            "imageId": selectedId,
+                          },
+                        );
+
+                        result.fold((success) {
+                          showSuccessMessage(
+                              message: isArabic
+                                  ? 'تم إضافة الملصق بنجاح'
+                                  : 'Banner added successfully');
+                          widget.afterAdd();
+                        }, (error) {
+                          showErrorMessage(message: error.message);
+                        });
+                      } catch (error) {}
+                      loading.hide;
+                    },
+                  );
+                },
+                title: LocaleKeys.add.tr(),
+                borderRadius: 8,
+                fontWeight: FontWeight.w700,
+                titleFontColor: AppColors.black,
+                titleFontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ),
+);
+  }
+}  
